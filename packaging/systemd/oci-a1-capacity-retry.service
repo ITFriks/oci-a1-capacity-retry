@@ -1,0 +1,20 @@
+# OPTIONAL systemd *user* service (runs as you, no root).
+# Install: bash scripts/install-systemd-user.sh
+#   or copy to ~/.config/systemd/user/ and run: systemctl --user daemon-reload
+# Network problems are retried by the program itself, so no network target is needed.
+[Unit]
+Description=OCI A1 capacity retry (re-submits a Resource Manager Apply until it succeeds)
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/oci-a1-retry run
+# Exit 0 (Apply succeeded / nothing to do) leaves the service stopped.
+# Exit 1 (non-capacity failure), 2 (config error), 3 (auth/permission) need a human:
+# no restart. Exit 5 (gave up after ~1 h of network errors) restarts after 5 minutes.
+Restart=on-failure
+RestartSec=300
+RestartPreventExitStatus=1 2 3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

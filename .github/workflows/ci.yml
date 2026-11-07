@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install package with dev extras
+        run: python -m pip install ".[dev]"
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Tests (mocked OCI, no cloud access)
+        run: python -m pytest --cov --cov-report=term-missing
+      - name: Console script smoke test
+        run: |
+          oci-a1-retry --version
+          oci-a1-retry --help
+          python -m oci_a1_retry --version
+
+  installers:
+    name: installers (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install.sh (shellcheck + private venv install)
+        if: runner.os == 'Linux'
+        run: |
+          shellcheck scripts/*.sh
+          bash scripts/install.sh --venv
+          ~/.local/bin/oci-a1-retry --version
+      - name: PowerShell scripts parse cleanly (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          foreach ($file in Get-ChildItem scripts\*.ps1) {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$errors) | Out-Null
+            if ($errors) { $errors; exit 1 }
+          }
+      - name: install.ps1 (private venv install, Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          .\scripts\install.ps1 -Venv
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & "$env:LOCALAPPDATA\oci-a1-capacity-retry\venv\Scripts\oci-a1-retry.exe" --version
+          if ($LASTEXITCODE -ne 0) { exit 1 }

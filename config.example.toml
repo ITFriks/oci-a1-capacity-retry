@@ -1,0 +1,50 @@
+# oci-a1-capacity-retry configuration (example values only).
+#
+# Copy to one of these locations and edit:
+#   ./config.toml                          (directory you run the command from)
+#   Linux:   ~/.config/oci-a1-capacity-retry/config.toml
+#   Windows: %APPDATA%\oci-a1-capacity-retry\config.toml
+# or point to it with --config PATH / OCI_A1_CONFIG.
+#
+# This file must NOT contain OCI credentials. Authentication always uses the
+# standard OCI config file (~/.oci/config) and its API key.
+#
+# Every setting can also come from an environment variable OCI_A1_<NAME>
+# (e.g. OCI_A1_STACK_OCID). Precedence: command line > environment > this file.
+# Windows paths: use single quotes, e.g. log_dir = 'C:\Users\me\oci-logs'
+
+# REQUIRED. OCI Console > Developer Services > Resource Manager > Stacks > your stack
+# > Stack information > OCID. (No stack yet? See README "Create the stack".)
+stack_ocid = "ocid1.ormstack.oc1.<region>.REPLACE_WITH_YOUR_STACK_OCID"
+
+# Region of the stack, e.g. "eu-frankfurt-1" or "us-ashburn-1".
+# Empty = the region of your OCI profile, which is normally right: Always Free A1
+# instances can only be created in your home region.
+region = ""
+
+# Profile name in the OCI config file.
+profile = "DEFAULT"
+
+# OCI config file. Empty = ~/.oci/config (%USERPROFILE%\.oci\config on Windows).
+oci_config_file = ""
+
+# Wait after an "Out of host capacity" failure before the next Apply (min 60).
+capacity_retry_seconds = 300
+
+# How often a running job is polled (min 5).
+job_poll_seconds = 15
+
+# HTTP 429 / transient API error backoff: 5, 10, 20, 40, 60, 60, ... seconds.
+throttle_initial_seconds = 5
+throttle_max_seconds = 60
+
+# Log directory. Empty = ~/.local/state/oci-a1-capacity-retry (Linux)
+# or %LOCALAPPDATA%\oci-a1-capacity-retry (Windows).
+log_dir = ""
+
+# Optional success notifications.
+notify_bell = true
+notify_desktop = true
+# Shell command run once after success; gets OCI_A1_JOB_ID and OCI_A1_STACK_NAME
+# as environment variables (quote them: "$OCI_A1_STACK_NAME").
+success_command = ""

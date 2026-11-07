@@ -1,0 +1,68 @@
+# --- Never commit credentials or local configuration -------------------------
+# Local settings (may contain your stack OCID). Only config.example.toml is tracked.
+config.toml
+*.local.toml
+# OCI config directory / API keys / certificates
+.oci/
+oci_config
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.p8
+*.der
+*.jks
+*_api_key*
+oci_api_key*
+id_rsa*
+id_ed25519*
+# Environment files
+.env
+.env.*
+*.env
+# Terraform state/variables can contain secrets
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
+# Tokens / generated credentials
+*.token
+*session_token*
+security_token*
+*.secret
+secrets/
+credentials*
+
+# --- Logs ------------------------------------------------------------------
+*.log
+*.log.*
+logs/
+
+# --- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.python-version
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# --- Editors / OS ----------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
