@@ -13,7 +13,7 @@ from pathlib import Path
 import oci
 
 from .config import LoadedConfig, Settings, validate_settings
-from .jobs import APPLY, format_time, short_ocid
+from .jobs import APPLY, StackInfo, format_time, short_ocid
 from .oci_client import (
     OciCallError,
     OciSetupError,
@@ -23,6 +23,7 @@ from .oci_client import (
     oci_config_location,
 )
 from .runner import EXIT_OK, EXIT_STOPPED
+from .shape import FREE_A1_MEMORY_GB, FREE_A1_OCPUS, SizeUnknown, a1_size, format_amount
 
 GatewayFactory = Callable[[Settings], ResourceManagerGateway]
 
@@ -134,6 +135,42 @@ def _check_api(
     )
     report.ok(f"Can list Resource Manager jobs ({detail})")
     report.info("Permission to create jobs ('manage orm-jobs') is confirmed by the first 'once'.")
+    _check_a1_size(gateway, stack, report)
+
+
+def _check_a1_size(gateway: ResourceManagerGateway, stack: StackInfo, report: _Report) -> None:
+    """Warn when the stack asks for more A1 than Always Free covers. Never a failure."""
+    free = f"{FREE_A1_OCPUS} OCPUs and {FREE_A1_MEMORY_GB} GB"
+    try:
+        archive = gateway.get_stack_tf_config(stack.id)
+        size = a1_size(archive, dict(stack.variables))
+    except OciCallError as err:
+        report.info(f"Could not download the stack's Terraform configuration ({err}).")
+        report.info(f"Check the VM size yourself: Always Free covers {free} of A1 in total.")
+        return
+    except SizeUnknown as exc:
+        report.info(f"Could not work out the A1 size from the stack: {exc}.")
+        report.info(f"Check the VM size yourself: Always Free covers {free} of A1 in total.")
+        return
+    if size is None:
+        report.warn(
+            "The stack's Terraform has no VM.Standard.A1.Flex instance (modules are not read)."
+        )
+        return
+    asks = (
+        f"Stack asks for {format_amount(size.ocpus)} OCPUs and {format_amount(size.memory_gb)} GB "
+        f"of A1 memory ({size.instances} instance{'s' if size.instances != 1 else ''})"
+    )
+    if size.within_free_tier:
+        report.ok(f"{asks}: within Always Free ({free} in total)")
+        report.info("Other A1 instances in your tenancy count toward the same allowance.")
+        return
+    report.warn(f"{asks}: more than Always Free covers ({free} in total since June 2026)")
+    report.info("Free account: the Apply fails with a service limit error.")
+    report.info(
+        "Pay As You Go account: the VM is created and the part above the allowance is billed."
+    )
+    report.info("To stay free, lower ocpus and memory_in_gbs in the stack before 'once' or 'run'.")
 
 
 def _check_log_dir(log_dir: Path, report: _Report) -> None:

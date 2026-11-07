@@ -126,12 +126,22 @@ class ResourceManagerGateway:
 
     def get_stack(self, stack_id: str) -> StackInfo:
         stack = _call(self._client.get_stack, stack_id)
+        variables = getattr(stack, "variables", None)
         return StackInfo(
             id=stack.id,
             display_name=strip_control(stack.display_name or ""),
             lifecycle_state=stack.lifecycle_state or "",
             compartment_id=stack.compartment_id or "",
+            variables=tuple(sorted((str(k), str(v)) for k, v in variables.items()))
+            if isinstance(variables, dict)
+            else (),
         )
+
+    def get_stack_tf_config(self, stack_id: str) -> bytes:
+        """The stack's Terraform configuration as a zip archive (read-only; doctor only)."""
+        data = _call(self._client.get_stack_tf_config, stack_id)
+        # The SDK returns the raw HTTP response for this "stream" operation.
+        return data if isinstance(data, (bytes, bytearray)) else data.content
 
     def list_jobs(self, stack_id: str) -> list[JobInfo]:
         """Most recent jobs of the stack, newest first."""

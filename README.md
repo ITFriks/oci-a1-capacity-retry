@@ -84,8 +84,9 @@ the Terraform configuration.
 ## Safety behaviour
 
 - **Only** reads the stack, lists/reads its jobs and job logs, and creates **Apply**
-  jobs for that one existing stack. The SDK wrapper exposes nothing else; a unit test
-  fails if destructive or stack-changing API calls appear anywhere in the source.
+  jobs for that one existing stack. `doctor` also downloads the stack's Terraform
+  configuration (read-only) to check the VM size. The SDK wrapper exposes nothing else;
+  a unit test fails if destructive or stack-changing API calls appear anywhere in the source.
 - Never creates or modifies a stack, never changes the Terraform configuration,
   shape, OCPUs or memory, never runs Destroy, never cancels or deletes anything.
   The Terraform stack is the single source of truth.
@@ -306,11 +307,20 @@ can read it, so keep it unguessable. Test it once by running the `curl` command 
 
 ```
 oci-a1-retry doctor   # read-only checks: Python, SDK, config, OCI profile/key, API auth,
-                      # stack access, job listing, log directory
+                      # stack access, job listing, A1 size vs Always Free, log directory
 oci-a1-retry status   # read-only: stack, recent jobs, what 'run' would do  (--json available)
 oci-a1-retry once     # at most ONE Apply attempt; no waiting after "out of capacity"
 oci-a1-retry run      # retry until the Apply succeeds
 ```
+
+`doctor` reads the VM size from the stack's Terraform (the `shape_config` of each
+`VM.Standard.A1.Flex` instance, including simple `var.x` values) and compares it with the
+Always Free allowance of **2 OCPUs and 12 GB in total** (since June 2026). Above it, you get
+a `[WARN]`: a free account's Apply would fail with a service limit error, and a Pay As You
+Go account would be billed for the part above the allowance. It never stops you, because a
+paid account may want a bigger VM. When the size can't be read (modules, `count`, computed
+values) or the download is refused, `doctor` says so and you check the size yourself.
+Other A1 instances in your tenancy use the same allowance.
 
 Common options (after the command): `--config PATH`, `--stack-id OCID`, `--region`,
 `--profile`, `--oci-config-file PATH`, `-v/--verbose` (debug output, full OCIDs).

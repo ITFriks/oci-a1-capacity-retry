@@ -187,7 +187,14 @@ def test_incomplete_profile_is_reported(tmp_path):
 
 def test_gateway_exposes_no_destructive_operations():
     public = {name for name in vars(ResourceManagerGateway) if not name.startswith("_")}
-    assert public == {"get_stack", "list_jobs", "create_apply_job", "get_job", "get_job_log"}
+    assert public == {
+        "get_stack",
+        "get_stack_tf_config",
+        "list_jobs",
+        "create_apply_job",
+        "get_job",
+        "get_job_log",
+    }
 
 
 def test_source_never_calls_destructive_or_stack_changing_apis():

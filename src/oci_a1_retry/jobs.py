@@ -25,6 +25,9 @@ class StackInfo:
     display_name: str
     lifecycle_state: str
     compartment_id: str = ""
+    # The stack's Terraform variables as (name, value) pairs. Only used to resolve var.x
+    # references in doctor's A1 size check; never logged (they can hold an SSH key).
+    variables: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

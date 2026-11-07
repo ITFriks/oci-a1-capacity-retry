@@ -3,6 +3,8 @@ oci.resource_manager.ResourceManagerClient and raises real SDK exception types."
 
 from __future__ import annotations
 
+import io
+import zipfile
 from collections import deque
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -34,6 +36,49 @@ Error: 400-InvalidParameter, Invalid shape config: ocpus must be at least 1
   on main.tf line 12, in resource "oci_core_instance" "vm":
 """
 _BASE_TIME = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
+
+# Shaped like the main.tf the OCI Console writes for "Save as stack" (values are quoted strings).
+CONSOLE_MAIN_TF = """\
+resource "oci_core_instance" "generated_oci_core_instance" {
+	agent_config {
+		plugins_config {
+			desired_state = "ENABLED"
+			name = "Compute Instance Monitoring"
+		}
+	}
+	availability_domain = "Xyzw:EU-FRANKFURT-1-AD-1"
+	compartment_id = "ocid1.compartment.oc1..aaaaaaaatest"
+	create_vnic_details {
+		assign_public_ip = "true"
+		subnet_id = "ocid1.subnet.oc1.eu-frankfurt-1.aaaaaaaatest"
+	}
+	display_name = "a1-vm"
+	metadata = {
+		"ssh_authorized_keys" = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFAKEFAKEFAKE user@host"
+	}
+	shape = "VM.Standard.A1.Flex"
+	shape_config {
+		memory_in_gbs = "{memory}"
+		ocpus = "{ocpus}"
+	}
+	source_details {
+		source_id = "ocid1.image.oc1.eu-frankfurt-1.aaaaaaaatest"
+		source_type = "image"
+	}
+}
+"""
+
+
+def console_tf(ocpus: str = "2", memory: str = "12") -> dict[str, str]:
+    return {"main.tf": CONSOLE_MAIN_TF.replace("{ocpus}", ocpus).replace("{memory}", memory)}
+
+
+def tf_zip(files: dict[str, str]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as bundle:
+        for name, text in files.items():
+            bundle.writestr(name, text)
+    return buffer.getvalue()
 
 
 @dataclass(frozen=True)
@@ -92,6 +137,8 @@ class FakeResourceManagerClient:
         errors: dict[str, list[BaseException]] | None = None,
         stack_state: str = "ACTIVE",
         events: list | None = None,
+        tf_files: dict[str, str] | None = None,
+        stack_variables: dict[str, str] | None = None,
     ) -> None:
         self.events: list = events if events is not None else []
         self.stack = models.Stack(
@@ -99,7 +146,9 @@ class FakeResourceManagerClient:
             display_name=STACK_NAME,
             lifecycle_state=stack_state,
             compartment_id="ocid1.compartment.oc1..aaaaaaaatest",
+            variables=dict(stack_variables or {}),
         )
+        self.tf_archive = tf_zip(tf_files if tf_files is not None else console_tf())
         self.jobs = list(jobs or [])  # newest first
         self.attempts = deque(attempts)  # consumed by create_job
         self.job_states = {key: deque(value) for key, value in (job_states or {}).items()}
@@ -155,6 +204,11 @@ class FakeResourceManagerClient:
     def get_job_logs_content(self, job_id: str, **kwargs: Any) -> SimpleNamespace:
         self._enter("get_job_logs_content", job_id)
         return SimpleNamespace(data=self.logs.get(job_id, ""))
+
+    def get_stack_tf_config(self, stack_id: str, **kwargs: Any) -> SimpleNamespace:
+        self._enter("get_stack_tf_config", stack_id)
+        # The real SDK returns the raw HTTP response for this operation; .content is the zip.
+        return SimpleNamespace(data=SimpleNamespace(content=self.tf_archive))
 
 
 class FakeSleep:

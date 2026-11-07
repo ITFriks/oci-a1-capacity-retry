@@ -15,6 +15,7 @@ from fakes import (
     Attempt,
     FakeResourceManagerClient,
     FakeSleep,
+    console_tf,
     gateway_for,
     make_job,
     service_error,
@@ -254,6 +255,61 @@ def test_doctor_all_checks_pass(env, oci_config, capsys):
     assert "[FAIL]" not in out
     assert f"stack '{STACK_NAME}' is ACTIVE" in out
     assert "latest Apply FAILED" in out
+    assert (
+        "[ OK ] Stack asks for 2 OCPUs and 12 GB of A1 memory (1 instance): within Always Free"
+        in out
+    )
+    assert "ssh-ed25519" not in out  # stack variables and Terraform values are never printed
+
+
+def test_doctor_warns_when_the_stack_asks_for_more_than_always_free(env, oci_config, capsys):
+    client = FakeResourceManagerClient(tf_files=console_tf("4", "24"))
+
+    code = cli(["doctor", "--oci-config-file", str(oci_config)], client)
+
+    out = capsys.readouterr().out
+    assert code == 0, out  # a warning, not a failure: Pay As You Go may want the bigger VM
+    assert "[WARN] Stack asks for 4 OCPUs and 24 GB of A1 memory (1 instance): more than" in out
+    assert "service limit error" in out
+    assert "billed" in out
+
+
+def test_doctor_explains_when_the_size_cannot_be_read(env, oci_config, capsys):
+    tf = console_tf()["main.tf"].replace('ocpus = "2"', "ocpus = local.cores")
+    client = FakeResourceManagerClient(tf_files={"main.tf": tf})
+
+    code = cli(["doctor", "--oci-config-file", str(oci_config)], client)
+
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "Could not work out the A1 size from the stack: ocpus is an expression" in out
+    assert "Check the VM size yourself" in out
+
+
+def test_doctor_carries_on_when_the_configuration_download_is_refused(env, oci_config, capsys):
+    client = FakeResourceManagerClient(
+        errors={
+            "get_stack_tf_config": [
+                service_error(404, "NotAuthorizedOrNotFound", "x", "get_stack_tf_config")
+            ]
+        }
+    )
+
+    code = cli(["doctor", "--oci-config-file", str(oci_config)], client)
+
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "Could not download the stack's Terraform configuration" in out
+
+
+def test_doctor_warns_when_the_stack_has_no_a1_instance(env, oci_config, capsys):
+    tf = console_tf()["main.tf"].replace("VM.Standard.A1.Flex", "VM.Standard.E2.1.Micro")
+    client = FakeResourceManagerClient(tf_files={"main.tf": tf})
+
+    code = cli(["doctor", "--oci-config-file", str(oci_config)], client)
+
+    assert code == 0
+    assert "no VM.Standard.A1.Flex instance" in capsys.readouterr().out
 
 
 def test_doctor_reports_missing_stack_and_oci_config(env, capsys):
